@@ -1,0 +1,26 @@
+name: Condition Detection Test
+
+on:
+  push:
+    branches:
+      - feature/abnormal-condition-detection
+  pull_request:
+    branches:
+      - feature/integration-testing
+
+jobs:
+  test-condition-detection:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run abnormal condition detection tests
+        run: |
+          python condition_detection_test.py
