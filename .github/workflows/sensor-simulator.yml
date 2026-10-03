@@ -1,0 +1,30 @@
+name: Sensor Simulator Verification
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sensor-simulator:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sensor simulator branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/sensor-simulator
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Run normal sensor simulation
+        run: |
+          timeout 6s python sensor_simulator.py --unit UNIT-001 --facility FACILITY-001 --interval 1 || test $? -eq 124
+
+      - name: Run abnormal sensor simulation
+        run: |
+          timeout 6s python sensor_simulator.py --unit UNIT-001 --facility FACILITY-001 --interval 1 --abnormal || test $? -eq 124
