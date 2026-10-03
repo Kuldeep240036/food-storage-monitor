@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from notification_service import notify_management
 
 DEFAULT_TEMPERATURE_RANGE = (2.0, 8.0)
 DEFAULT_HUMIDITY_RANGE = (45.0, 65.0)
@@ -29,7 +30,7 @@ def evaluate_reading(
 
     severity = "HIGH" if len(alerts) >= 2 else "MEDIUM" if alerts else "LOW"
 
-    return {
+    result = {
         "alert_id": f"ALT-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "facility_id": reading["facility_id"],
@@ -38,6 +39,22 @@ def evaluate_reading(
         "severity": severity,
         "alerts": alerts
     }
+
+    if result["triggered"]:
+        message = (
+            f"FreshChoice SafeStore alert: "
+            f"{result['storage_unit_id']} at {result['facility_id']} "
+            f"has an abnormal storage condition. "
+            f"Severity: {result['severity']}. "
+            f"Alerts: {', '.join(result['alerts'])}"
+        )
+
+        result["notification"] = notify_management(
+            message,
+            send_mobile_sms=True
+        )
+
+    return result
 
 
 if __name__ == "__main__":

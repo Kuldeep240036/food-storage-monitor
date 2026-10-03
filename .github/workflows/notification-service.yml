@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/mobile-sms-notifications
+      - feature/alert-notification-integration
   workflow_dispatch:
 
 jobs:
@@ -21,3 +22,6 @@ jobs:
 
       - name: Run notification service test
         run: python test_notification_service.py
+
+      - name: Run alert notification integration
+        run: python alert_management.py
