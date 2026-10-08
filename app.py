@@ -1,4 +1,5 @@
 import sqlite3
+import hmac
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -18,6 +19,68 @@ st.set_page_config(
 )
 
 DB_PATH = Path("data") / "safestore.db"
+
+
+# ---------------------------------------------------------
+# PROTOTYPE AUTHENTICATION
+# ---------------------------------------------------------
+# Demo-only credentials for the assessment prototype.
+# For production, use a proper identity provider and secrets manager.
+DEMO_USERS = {
+    "manager": {"password": "SafeStore123", "role": "Manager"},
+    "staff": {"password": "Staff123", "role": "Staff"},
+}
+
+
+def authenticate(username: str, password: str):
+    user = DEMO_USERS.get(username.strip().lower())
+    if not user:
+        return None
+    if not hmac.compare_digest(password, user["password"]):
+        return None
+    return user["role"]
+
+
+def show_login():
+    st.markdown("""
+    <div style="text-align:center; padding: 2rem 0 1rem 0;">
+        <h1>FreshChoice SafeStore</h1>
+        <p>Smart Storage Monitoring & Risk Management System</p>
+        <p><b>Prototype Login</b></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    _, center, _ = st.columns([1, 1.4, 1])
+    with center:
+        with st.form("login_form"):
+            st.subheader("Sign in")
+            username = st.text_input("Username", placeholder="Enter your username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            submitted = st.form_submit_button("Login", use_container_width=True)
+            if submitted:
+                role = authenticate(username, password)
+                if role:
+                    st.session_state["authenticated"] = True
+                    st.session_state["username"] = username.strip().lower()
+                    st.session_state["role"] = role
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password.")
+        st.caption("Prototype roles: Manager and Staff")
+
+
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    show_login()
+    st.stop()
+
+
+def logout():
+    for key in ["authenticated", "username", "role"]:
+        st.session_state.pop(key, None)
+    st.rerun()
 
 
 # ---------------------------------------------------------
@@ -349,19 +412,17 @@ initialise_database()
 
 st.title("FreshChoice SafeStore")
 st.caption("Smart Storage Monitoring & Risk Management System")
-
 st.markdown(
-    """
-    Monitor storage conditions, detect abnormal readings,
-    review alerts and analyse historical storage performance.
-    """
+    "Monitor storage conditions, detect abnormal readings, review alerts and analyse historical storage performance."
 )
 
+st.sidebar.success(
+    f"Signed in: {st.session_state['username']} ({st.session_state['role']})"
+)
+if st.sidebar.button("Log out", use_container_width=True):
+    logout()
 
-# ---------------------------------------------------------
-# SIDEBAR
-# ---------------------------------------------------------
-
+st.sidebar.markdown("---")
 st.sidebar.header("Sensor Controls")
 
 if st.sidebar.button("Generate Normal Reading", use_container_width=True):
@@ -397,9 +458,8 @@ alerts = get_alerts()
 # APPLICATION VIEWS
 # ---------------------------------------------------------
 
-management_tab, staff_tab = st.tabs(["Management Dashboard", "Staff Portal"])
-
-with management_tab:
+if st.session_state["role"] == "Manager":
+    st.markdown("## Management Dashboard")
     # ---------------------------------------------------------
     # KPI CARDS
     # ---------------------------------------------------------
@@ -591,10 +651,8 @@ with management_tab:
         r3.metric("High Risk", risk_counts["HIGH"])
         r4.metric("Critical Risk", risk_counts["CRITICAL"])
 
-
-
-
-with staff_tab:
+elif st.session_state["role"] == "Staff":
+    st.markdown("## Staff Monitoring Portal")
     st.subheader("Staff Monitoring Portal")
     st.caption("Operational view for current conditions, alerts, inspections and equipment reporting.")
 
