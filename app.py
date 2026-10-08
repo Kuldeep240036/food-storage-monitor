@@ -435,10 +435,19 @@ if len(readings) >= 2:
 
     chart_data = chart_data.sort_values("timestamp")
 
-    st.line_chart(
-        chart_data.set_index("timestamp")[
-            ["temperature", "humidity"]
-        ]
+    st.markdown("### Historical Readings")
+
+    st.dataframe(
+        chart_data[
+            [
+                "timestamp",
+                "temperature",
+                "humidity",
+                "storage_unit_status"
+            ]
+        ].tail(10),
+        use_container_width=True,
+        hide_index=True
     )
 
 else:
