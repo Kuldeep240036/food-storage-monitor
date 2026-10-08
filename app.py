@@ -57,6 +57,33 @@ def initialise_database():
             """
         )
 
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS inspections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                storage_unit_id TEXT NOT NULL,
+                staff_name TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                notes TEXT NOT NULL
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS equipment_problems (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                storage_unit_id TEXT NOT NULL,
+                staff_name TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                description TEXT NOT NULL,
+                status TEXT NOT NULL
+            )
+            """
+        )
+
 
 def save_reading(reading):
     initialise_database()
@@ -147,6 +174,80 @@ def get_alerts():
                 severity,
                 message
             FROM alerts
+            ORDER BY id DESC
+            """,
+            conn,
+        )
+
+
+def save_inspection(staff_name, outcome, notes):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO inspections (
+                timestamp,
+                storage_unit_id,
+                staff_name,
+                outcome,
+                notes
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                datetime.utcnow().isoformat(),
+                "UNIT-001",
+                staff_name,
+                outcome,
+                notes,
+            ),
+        )
+
+
+def save_equipment_problem(staff_name, priority, description):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO equipment_problems (
+                timestamp,
+                storage_unit_id,
+                staff_name,
+                priority,
+                description,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                datetime.utcnow().isoformat(),
+                "UNIT-001",
+                staff_name,
+                priority,
+                description,
+                "OPEN",
+            ),
+        )
+
+
+def get_inspections():
+    initialise_database()
+    with sqlite3.connect(DB_PATH) as conn:
+        return pd.read_sql_query(
+            """
+            SELECT timestamp, storage_unit_id, staff_name, outcome, notes
+            FROM inspections
+            ORDER BY id DESC
+            """,
+            conn,
+        )
+
+
+def get_equipment_problems():
+    initialise_database()
+    with sqlite3.connect(DB_PATH) as conn:
+        return pd.read_sql_query(
+            """
+            SELECT timestamp, storage_unit_id, staff_name, priority, description, status
+            FROM equipment_problems
             ORDER BY id DESC
             """,
             conn,
@@ -293,205 +394,339 @@ alerts = get_alerts()
 
 
 # ---------------------------------------------------------
-# KPI CARDS
+# APPLICATION VIEWS
 # ---------------------------------------------------------
 
-col1, col2, col3, col4 = st.columns(4)
+management_tab, staff_tab = st.tabs(["Management Dashboard", "Staff Portal"])
 
-if not readings.empty:
-    latest = readings.iloc[0]
+with management_tab:
+    # ---------------------------------------------------------
+    # KPI CARDS
+    # ---------------------------------------------------------
 
-    col1.metric(
-        "Temperature",
-        f"{latest['temperature']:.2f} °C"
-    )
+    col1, col2, col3, col4 = st.columns(4)
 
-    col2.metric(
-        "Humidity",
-        f"{latest['humidity']:.2f} %"
-    )
+    if not readings.empty:
+        latest = readings.iloc[0]
 
-    col3.metric(
-        "Unit Status",
-        latest["storage_unit_status"]
-    )
-
-else:
-    col1.metric("Temperature", "--")
-    col2.metric("Humidity", "--")
-    col3.metric("Unit Status", "NO DATA")
-
-col4.metric(
-    "Total Alerts",
-    len(alerts)
-)
-
-
-# ---------------------------------------------------------
-# CURRENT CONDITION
-# ---------------------------------------------------------
-
-st.markdown("## Current Storage Condition")
-
-if not readings.empty:
-
-    latest = readings.iloc[0]
-
-    latest_reading = {
-        "temperature": latest["temperature"],
-        "humidity": latest["humidity"],
-        "storage_unit_status": latest["storage_unit_status"],
-        "storage_unit_id": latest["storage_unit_id"],
-    }
-
-    condition = detect_condition(latest_reading)
-
-    if condition["abnormal"]:
-        st.error(
-            f"⚠️ ABNORMAL CONDITION DETECTED — "
-            f"{condition['risk_level']} RISK"
+        col1.metric(
+            "Temperature",
+            f"{latest['temperature']:.2f} °C"
         )
 
-        for violation in condition["violations"]:
-            st.warning(violation)
+        col2.metric(
+            "Humidity",
+            f"{latest['humidity']:.2f} %"
+        )
+
+        col3.metric(
+            "Unit Status",
+            latest["storage_unit_status"]
+        )
 
     else:
-        st.success(
-            "✅ Storage conditions are within the acceptable range."
-        )
+        col1.metric("Temperature", "--")
+        col2.metric("Humidity", "--")
+        col3.metric("Unit Status", "NO DATA")
 
-else:
-    st.info(
-        "No sensor readings available yet. "
-        "Use the sidebar to generate a sensor reading."
+    col4.metric(
+        "Total Alerts",
+        len(alerts)
     )
 
 
-# ---------------------------------------------------------
-# CURRENT READING TABLE
-# ---------------------------------------------------------
+    # ---------------------------------------------------------
+    # CURRENT CONDITION
+    # ---------------------------------------------------------
 
-st.markdown("## Current Storage Reading")
+    st.markdown("## Current Storage Condition")
 
-if not readings.empty:
+    if not readings.empty:
 
-    display_columns = [
-        "timestamp",
-        "facility_id",
-        "storage_unit_id",
-        "temperature",
-        "humidity",
-        "storage_unit_status",
-    ]
+        latest = readings.iloc[0]
 
-    st.dataframe(
-        readings[display_columns].head(10),
-        use_container_width=True,
-        hide_index=True,
-    )
-
-
-# ---------------------------------------------------------
-# ALERTS
-# ---------------------------------------------------------
-
-st.markdown("## Alerts & Notifications")
-
-if alerts.empty:
-
-    st.success("No alerts recorded.")
-
-else:
-
-    for _, alert in alerts.head(5).iterrows():
-
-        st.error(
-            f"🚨 {alert['risk_level']} RISK | "
-            f"{alert['storage_unit_id']} | "
-            f"{alert['temperature']}°C | "
-            f"{alert['humidity']}% RH"
-        )
-
-        st.write(alert["message"])
-
-        st.caption(
-            f"Generated: {alert['timestamp']}"
-        )
-
-
-# ---------------------------------------------------------
-# HISTORICAL TRENDS
-# ---------------------------------------------------------
-
-st.markdown("## Historical Temperature & Humidity")
-
-if len(readings) >= 2:
-
-    chart_data = readings.copy()
-
-    chart_data["timestamp"] = pd.to_datetime(
-        chart_data["timestamp"]
-    )
-
-    chart_data = chart_data.sort_values("timestamp")
-
-    st.markdown("### Historical Readings")
-
-    st.dataframe(
-        chart_data[
-            [
-                "timestamp",
-                "temperature",
-                "humidity",
-                "storage_unit_status"
-            ]
-        ].tail(10),
-        use_container_width=True,
-        hide_index=True
-    )
-
-else:
-
-    st.info(
-        "Generate at least two sensor readings to display historical trends."
-    )
-
-
-# ---------------------------------------------------------
-# STORAGE RISK SUMMARY
-# ---------------------------------------------------------
-
-st.markdown("## Storage Risk Summary")
-
-if not readings.empty:
-
-    risk_counts = {
-        "LOW": 0,
-        "MEDIUM": 0,
-        "HIGH": 0,
-        "CRITICAL": 0,
-    }
-
-    for _, row in readings.iterrows():
-
-        test_reading = {
-            "temperature": row["temperature"],
-            "humidity": row["humidity"],
-            "storage_unit_status": row["storage_unit_status"],
-            "storage_unit_id": row["storage_unit_id"],
+        latest_reading = {
+            "temperature": latest["temperature"],
+            "humidity": latest["humidity"],
+            "storage_unit_status": latest["storage_unit_status"],
+            "storage_unit_id": latest["storage_unit_id"],
         }
 
-        result = detect_condition(test_reading)
+        condition = detect_condition(latest_reading)
 
-        risk_counts[result["risk_level"]] += 1
+        if condition["abnormal"]:
+            st.error(
+                f"⚠️ ABNORMAL CONDITION DETECTED — "
+                f"{condition['risk_level']} RISK"
+            )
 
-    r1, r2, r3, r4 = st.columns(4)
+            for violation in condition["violations"]:
+                st.warning(violation)
 
-    r1.metric("Low Risk", risk_counts["LOW"])
-    r2.metric("Medium Risk", risk_counts["MEDIUM"])
-    r3.metric("High Risk", risk_counts["HIGH"])
-    r4.metric("Critical Risk", risk_counts["CRITICAL"])
+        else:
+            st.success(
+                "✅ Storage conditions are within the acceptable range."
+            )
 
+    else:
+        st.info(
+            "No sensor readings available yet. "
+            "Use the sidebar to generate a sensor reading."
+        )
+
+
+    # ---------------------------------------------------------
+    # CURRENT READING TABLE
+    # ---------------------------------------------------------
+
+    st.markdown("## Current Storage Reading")
+
+    if not readings.empty:
+
+        display_columns = [
+            "timestamp",
+            "facility_id",
+            "storage_unit_id",
+            "temperature",
+            "humidity",
+            "storage_unit_status",
+        ]
+
+        st.dataframe(
+            readings[display_columns].head(10),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
+    # ---------------------------------------------------------
+    # ALERTS
+    # ---------------------------------------------------------
+
+    st.markdown("## Alerts & Notifications")
+
+    if alerts.empty:
+
+        st.success("No alerts recorded.")
+
+    else:
+
+        for _, alert in alerts.head(5).iterrows():
+
+            st.error(
+                f"🚨 {alert['risk_level']} RISK | "
+                f"{alert['storage_unit_id']} | "
+                f"{alert['temperature']}°C | "
+                f"{alert['humidity']}% RH"
+            )
+
+            st.write(alert["message"])
+
+            st.caption(
+                f"Generated: {alert['timestamp']}"
+            )
+
+
+    # ---------------------------------------------------------
+    # HISTORICAL TRENDS
+    # ---------------------------------------------------------
+
+    st.markdown("## Historical Temperature & Humidity")
+
+    if len(readings) >= 2:
+
+        chart_data = readings.copy()
+
+        chart_data["timestamp"] = pd.to_datetime(
+            chart_data["timestamp"]
+        )
+
+        chart_data = chart_data.sort_values("timestamp")
+
+        st.line_chart(
+            chart_data.set_index("timestamp")[
+                ["temperature", "humidity"]
+            ]
+        )
+
+    else:
+
+        st.info(
+            "Generate at least two sensor readings to display historical trends."
+        )
+
+
+    # ---------------------------------------------------------
+    # STORAGE RISK SUMMARY
+    # ---------------------------------------------------------
+
+    st.markdown("## Storage Risk Summary")
+
+    if not readings.empty:
+
+        risk_counts = {
+            "LOW": 0,
+            "MEDIUM": 0,
+            "HIGH": 0,
+            "CRITICAL": 0,
+        }
+
+        for _, row in readings.iterrows():
+
+            test_reading = {
+                "temperature": row["temperature"],
+                "humidity": row["humidity"],
+                "storage_unit_status": row["storage_unit_status"],
+                "storage_unit_id": row["storage_unit_id"],
+            }
+
+            result = detect_condition(test_reading)
+
+            risk_counts[result["risk_level"]] += 1
+
+        r1, r2, r3, r4 = st.columns(4)
+
+        r1.metric("Low Risk", risk_counts["LOW"])
+        r2.metric("Medium Risk", risk_counts["MEDIUM"])
+        r3.metric("High Risk", risk_counts["HIGH"])
+        r4.metric("Critical Risk", risk_counts["CRITICAL"])
+
+
+
+
+with staff_tab:
+    st.subheader("Staff Monitoring Portal")
+    st.caption("Operational view for current conditions, alerts, inspections and equipment reporting.")
+
+    # Current conditions
+    staff_readings = get_readings()
+    staff_alerts = get_alerts()
+    staff_inspections = get_inspections()
+    staff_equipment = get_equipment_problems()
+
+    if not staff_readings.empty:
+        current = staff_readings.iloc[0]
+
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Temperature", f"{current['temperature']:.2f} °C")
+        s2.metric("Humidity", f"{current['humidity']:.2f} %")
+        s3.metric("Unit Status", current["storage_unit_status"])
+
+        st.markdown("### Current & Historical Readings")
+        st.dataframe(
+            staff_readings[
+                [
+                    "timestamp",
+                    "storage_unit_id",
+                    "temperature",
+                    "humidity",
+                    "storage_unit_status",
+                ]
+            ].head(10),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("No sensor readings available yet. Generate a reading from the Sensor Controls.")
+
+    # Alerts
+    st.markdown("### Alerts")
+    if staff_alerts.empty:
+        st.success("No alerts recorded.")
+    else:
+        st.dataframe(
+            staff_alerts[
+                [
+                    "timestamp",
+                    "storage_unit_id",
+                    "temperature",
+                    "humidity",
+                    "risk_level",
+                    "severity",
+                    "message",
+                ]
+            ].head(10),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    # Inspection form
+    st.markdown("### Record Storage Inspection")
+    inspection_staff = st.text_input("Staff name", key="inspection_staff")
+    inspection_outcome = st.selectbox(
+        "Inspection outcome",
+        ["PASS", "MINOR ISSUE", "FAIL"],
+        key="inspection_outcome",
+    )
+    inspection_notes = st.text_area("Inspection notes", key="inspection_notes")
+
+    if st.button("Save Inspection", key="save_inspection"):
+        if not inspection_staff.strip():
+            st.error("Please enter the staff name.")
+        else:
+            save_inspection(
+                inspection_staff.strip(),
+                inspection_outcome,
+                inspection_notes.strip(),
+            )
+            st.success("Inspection recorded successfully.")
+            st.rerun()
+
+    # Equipment problem form
+    st.markdown("### Report Equipment Problem")
+    equipment_staff = st.text_input("Staff name", key="equipment_staff")
+    equipment_priority = st.selectbox(
+        "Priority",
+        ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        key="equipment_priority",
+    )
+    equipment_description = st.text_area(
+        "Problem description",
+        key="equipment_description",
+    )
+
+    if st.button("Submit Equipment Problem", key="save_equipment"):
+        if not equipment_staff.strip():
+            st.error("Please enter the staff name and problem description.")
+        else:
+            save_equipment_problem(
+                equipment_staff.strip(),
+                equipment_priority,
+                equipment_description.strip(),
+            )
+            st.success("Equipment problem recorded successfully.")
+            st.rerun()
+
+    # Existing records
+    st.markdown("### Inspection History")
+    if staff_inspections.empty:
+        st.info("No inspections recorded yet.")
+    else:
+        st.dataframe(
+            staff_inspections.head(10),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.markdown("### Equipment Problems")
+    if staff_equipment.empty:
+        st.info("No equipment problems recorded yet.")
+    else:
+        st.dataframe(
+            staff_equipment.head(10),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    # Notification status
+    st.markdown("### Notification Status")
+    if not staff_alerts.empty:
+        st.warning(
+            "Notification path: SIMULATION MODE. "
+            "The dashboard records and displays alerts. Live SMS requires provider configuration."
+        )
+    else:
+        st.success("No notification event pending.")
 
 # ---------------------------------------------------------
 # FOOTER
